@@ -1,8 +1,9 @@
 # Lginx
-its a in-house simple Load-Balancer and more.
+its a in-house simple Load-Balancer, ReverseProxy and more.
 
 ## Done
- - Round Robin Algorithm for balancinf reqs
+ - Round Robin Algorithm for balancing reqs
+ - Reverse Proxy for multiple backend servers
  - Auto HealthCheck (backend server's)
  - Mutex (Down/Up for backends)
 
