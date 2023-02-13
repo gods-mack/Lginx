@@ -8,7 +8,7 @@ import (
 	"net/url"
 	//"html"
 	//"math/rand"
-	//"time"
+	"time"
 	//"strings"
 	//"os"
 	//"io/ioutil"
@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"net/http/httputil"
+	"net"
 )
 
 /*
@@ -125,7 +126,7 @@ func (bp *BackendPool) GetBackend() *BackendHost{
 	indx := int(atomic.AddUint64(&bp.current, uint64(1)) % uint64(len(bp.backends)))
 	
 	for i:=indx; i < len(bp.backends)+indx; i++ {
-		if bp.backends[i%len(bp.backends)].IsAlive {
+		if GetIsAlive(bp.backends[i%len(bp.backends)]) {
 			if i != indx {
 				atomic.StoreUint64(&bp.current, uint64(i%len(bp.backends)))
 			}
@@ -157,10 +158,62 @@ func make_backend_alive(b *BackendHost, is_alive bool) {
 	b.mutex.Unlock()
 }
 
+func GetIsAlive(b *BackendHost) (is_alive bool) {
+	b.mutex.RLock()
+	is_alive = b.IsAlive
+	b.mutex.RUnlock()
+	return
+}
+
+func isBackendAlive(ip string) bool {
+	timeout := 2 * time.Second
+	u, err := url.Parse(ip)
+	conn, err := net.DialTimeout("tcp", u.Host, timeout)
+	if err != nil {
+		log.Println("Site unreachable, error: ", err)
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+// HealthCheck pings the backends and update the status
+func (s *BackendPool) HealthCheck() {
+	for _, b := range s.backends {
+		status := "up"
+		alive := isBackendAlive(b.IP)
+		make_backend_alive(b, alive)
+		if !alive {
+			status = "down"
+		}
+		log.Printf("%s [%s]\n", b.IP, status)
+	}
+}
+
+// HealthCheck pings the backends and update the status every minute
+func healthCheck() {
+	t := time.NewTicker(time.Minute * 1) 
+	for {
+		select {
+		case <-t.C:
+			log.Println("Starting health check...")
+			backendPool.HealthCheck()
+			log.Println("Health check completed")
+		}
+	}
+}
+
+
+func (bp *BackendPool) all_hosts_status() {
+	for _ , b := range bp.backends {
+		fmt.Println(b.IP)
+		fmt.Println(b.IsAlive)
+	}
+}
 func (bp *BackendPool) UpdateBackendStatus(target_ip string, status string) {
 
 
-	for _, b := range bp.backends {
+	for _ , b := range bp.backends {
 		if b.IP == target_ip {
 			if status == "down"{
 				make_backend_alive(b, false)
@@ -179,6 +232,7 @@ func (bp *BackendPool) proxy_error_handler(w http.ResponseWriter, r *http.Reques
 	target_url := "http://" + r.URL.Hostname() + ":" + r.URL.Port()
 	log.Print("ERR: ", target_url, " is DOWN")
 	bp.UpdateBackendStatus(target_url, "down")
+	bp.all_hosts_status()
 }
 
 // func local_http_handler(w http.RebponseWriter, r *http.Request) {
@@ -245,6 +299,7 @@ func main() {
 
     http.HandleFunc("/", proxy_handler1)
     fmt.Printf("Lginx started at port %d\n", proxy_port)
+    go healthCheck()
 
     log.Fatal(http.ListenAndServe(":80", nil))
 
