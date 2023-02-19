@@ -312,56 +312,51 @@ func main() {
     if err != nil {
     	log.Fatal("config file read err", err)
     }
-    //defer configFile.Close()
+    defer configFile.Close()
     byteValue, _ := ioutil.ReadAll(configFile)
 
-    // var configMap map[string]interface{}
-    // json.Unmarshal([]byte(byteValue), &configMap)
-    // //fmt.Println("configMap", configMap["backend_hosts"])
-    
-    // hosts := configMap["backend_hosts"].(string)
-    // //hosts  := configMap["backend_hosts"]
-    // proxy_port := configMap["default_lginx_port"].(int)
-
-    js, err := simplejson.NewJson(byteValue)
+    configJs, err := simplejson.NewJson(byteValue)
     if err != nil {
     	fmt.Print("err")
     }
-    fmt.Println("print")
-    //fmt.Println(hosts, proxy_port)
+
+   	hosts := configJs.Get("backend_hosts").MustStringArray()
+   	lginxPort := configJs.Get("default_lginx_port").MustString()
+
+   	if len(hosts) == 0 {
+   		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    		http.ServeFile(w, r, "./index/index.html")
+		})
+   		log.Fatal(http.ListenAndServe(":"+lginxPort, nil))
+
+   	} else {
 
 
-    //proxy_port := 81
-   	//hosts := []string{
-   	//	"http://127.0.0.1:8001",
-   	//}
-   	hosts := js.Get("backend_hosts").MustStringArray()
-   	lginxPort := js.Get("default_lginx_port").MustString()
-   	fmt.Println(hosts)
    
-    for _, ip := range hosts {
-    	bkend_ip, err := url.Parse(ip)
-    	if err != nil {
-    		log.Fatal(err)
-    	}
-    	fmt.Println(bkend_ip)
-    	proxy := httputil.NewSingleHostReverseProxy(bkend_ip)
-    	proxy.ErrorHandler = backendPool.proxy_error_handler
-    	backendPool.RegisterBackend(
-    		&BackendHost{
-    			IP: 			ip,
-    			IsAlive: 		true,
-    			ReverseProxy: 	proxy,
-    		})
+	    for _, ip := range hosts {
+	    	bkend_ip, err := url.Parse(ip)
+	    	if err != nil {
+	    		log.Fatal(err)
+	    	}
+	    	fmt.Println(bkend_ip)
+	    	proxy := httputil.NewSingleHostReverseProxy(bkend_ip)
+	    	proxy.ErrorHandler = backendPool.proxy_error_handler
+	    	backendPool.RegisterBackend(
+	    		&BackendHost{
+	    			IP: 			ip,
+	    			IsAlive: 		true,
+	    			ReverseProxy: 	proxy,
+	    		})
 
-    }
+	    }
 
 
-    http.HandleFunc("/", proxy_handler1)
-    fmt.Printf("Lginx started at port %s\n", lginxPort)
-    go healthCheck()
+	    http.HandleFunc("/", proxy_handler1)
+	    fmt.Printf("Lginx started at port %s\n", lginxPort)
+	    go healthCheck()
 
-    log.Fatal(http.ListenAndServe(":"+lginxPort, nil))
+	    log.Fatal(http.ListenAndServe(":"+lginxPort, nil))
+	}
 
 	
 	
