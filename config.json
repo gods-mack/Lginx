@@ -1,0 +1,6 @@
+{
+	"default_lginx_port":"8081",
+	"proxy_pass":"",
+	"backend_hosts":[
+	] 
+}

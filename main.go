@@ -10,13 +10,15 @@ import (
 	//"math/rand"
 	"time"
 	//"strings"
-	//"os"
-	//"io/ioutil"
+	"os"
+	"io/ioutil"
 	//"encoding/json"
 	"sync"
 	"sync/atomic"
 	"net/http/httputil"
 	"net"
+	"lginx/cache"
+	"github.com/bitly/go-simplejson"
 )
 
 /*
@@ -105,6 +107,16 @@ and sends it to another server, proxying the rebponse back to the client.
 // }
 
 
+var CACHE_OBJ cache.Cache
+func init() {
+	fmt.Println("Main setuping cache.")
+	var hmap = make(map[string]string)
+   	//f := new(parent.Father)
+	CACHE_OBJ = (cache.Cache{Capacity: 8, Storage: hmap, Current_size: 0})
+	CACHE_OBJ.Put("Manish", "sjf")
+
+}
+
 type BackendHost struct {
 	IP string
 	IsAlive bool
@@ -121,6 +133,8 @@ func (bp *BackendPool) RegisterBackend(b *BackendHost) {
 	bp.backends = append(bp.backends, b)
 
 }
+
+
 
 func (bp *BackendPool) GetBackend() *BackendHost{
 	indx := int(atomic.AddUint64(&bp.current, uint64(1)) % uint64(len(bp.backends)))
@@ -140,16 +154,42 @@ func (bp *BackendPool) GetBackend() *BackendHost{
 func proxy_handler1(w http.ResponseWriter, r *http.Request)  {
 
 	available_backend := backendPool.GetBackend()
-	log.Print(r.Method, " ", r.URL.Path, " ", 
-			available_backend.IP)
+	req_log := r.Method +  "_" + r.URL.Path +  "_" + available_backend.IP
+	fmt.Println(r.URL.Query())
+
+	log.Print(req_log)
 
 	if available_backend != nil {
-		available_backend.ReverseProxy.ServeHTTP(w, r)
+		w.Header().Add("url", req_log)
+		available_backend.ReverseProxy.ServeHTTP(NewCustomWriter(w), r)
+		//fmt.Println(w.Body)
 		return
 	}
 	http.Error(w, "Service not available", http.StatusServiceUnavailable)
 
 }
+type customWriter struct {
+    http.ResponseWriter
+}
+
+func NewCustomWriter(w http.ResponseWriter) *customWriter {
+    return &customWriter{w}
+}
+
+func (c *customWriter) Header() http.Header {
+    return c.ResponseWriter.Header()
+}
+
+func (c *customWriter) Write(data []byte) (int, error) {
+    fmt.Println((c.Header())) //get response here
+    //CACHE_OBJ.put()
+    return c.ResponseWriter.Write(data)
+}
+
+func (c *customWriter) WriteHeader(i int) {
+    c.ResponseWriter.WriteHeader(i)
+}
+
 
 
 func make_backend_alive(b *BackendHost, is_alive bool) {
@@ -268,40 +308,55 @@ func main() {
 	fmt.Println(" Welcome to our in-house Load Balancer (Lginx) ")
     fmt.Println("=================================================")
 
-    proxy_port := 80
-    hosts := []string{
-    		"http://127.0.0.1:8001",
-    		"http://192.168.1.27:8001",
-    		"http://192.168.1.27:8002",
-    		"http://192.168.1.27:8003",
-    		"http://192.168.1.27:8004",
-    	}
+    configFile, err := os.Open("config.json")
+    if err != nil {
+    	log.Fatal("config file read err", err)
+    }
+    defer configFile.Close()
+    byteValue, _ := ioutil.ReadAll(configFile)
+
+    configJs, err := simplejson.NewJson(byteValue)
+    if err != nil {
+    	fmt.Print("err")
+    }
+
+   	hosts := configJs.Get("backend_hosts").MustStringArray()
+   	lginxPort := configJs.Get("default_lginx_port").MustString()
+
+   	if len(hosts) == 0 {
+   		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    		http.ServeFile(w, r, "./index/index.html")
+		})
+   		log.Fatal(http.ListenAndServe(":"+lginxPort, nil))
+
+   	} else {
 
 
    
+	    for _, ip := range hosts {
+	    	bkend_ip, err := url.Parse(ip)
+	    	if err != nil {
+	    		log.Fatal(err)
+	    	}
+	    	fmt.Println(bkend_ip)
+	    	proxy := httputil.NewSingleHostReverseProxy(bkend_ip)
+	    	proxy.ErrorHandler = backendPool.proxy_error_handler
+	    	backendPool.RegisterBackend(
+	    		&BackendHost{
+	    			IP: 			ip,
+	    			IsAlive: 		true,
+	    			ReverseProxy: 	proxy,
+	    		})
 
-    for _, ip := range hosts {
-    	bkend_ip, err := url.Parse(ip)
-    	if err != nil {
-    		log.Fatal(err)
-    	}
-    	proxy := httputil.NewSingleHostReverseProxy(bkend_ip)
-    	proxy.ErrorHandler = backendPool.proxy_error_handler
-    	backendPool.RegisterBackend(
-    		&BackendHost{
-    			IP: 			ip,
-    			IsAlive: 		true,
-    			ReverseProxy: 	proxy,
-    		})
-
-    }
+	    }
 
 
-    http.HandleFunc("/", proxy_handler1)
-    fmt.Printf("Lginx started at port %d\n", proxy_port)
-    go healthCheck()
+	    http.HandleFunc("/", proxy_handler1)
+	    fmt.Printf("Lginx started at port %s\n", lginxPort)
+	    go healthCheck()
 
-    log.Fatal(http.ListenAndServe(":80", nil))
+	    log.Fatal(http.ListenAndServe(":"+lginxPort, nil))
+	}
 
 	
 	
