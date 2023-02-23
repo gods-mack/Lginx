@@ -21,7 +21,6 @@ its a in-house simple Load-Balancer, ReverseProxy and more.
  - git clone repo
  - `go run main.go`
  - hit `localhost:8081` you will see a html page if everything is ok.
-![image](https://ibb.co/QNyMwwK)
 
 ## Configs
  - add configs in `config.json`
