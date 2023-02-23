@@ -17,14 +17,15 @@ its a in-house simple Load-Balancer, ReverseProxy and more.
 
 ## How to run
  - git clone repo
- - go run main.go
+ - `go run main.go`
  - add configs in `config.json`
     - "backend_hosts"  -> add all your backend server IP
     - "default_proxy_server" -> "add your desired proxy server,
         by default it is `8081`"
     
 e.g -> `config.json`
-```{
+```
+{
 	"default_lginx_port":"8081",
 	"proxy_pass":"",
 	"proxy_server_name":"lginx",
