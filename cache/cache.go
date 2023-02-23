@@ -28,20 +28,15 @@ func (c *Cache) Put(key string, data string) {
 		r := c.Dq.Index(func(element string) bool {
 			return element == key
 		})
-		fmt.Println("deletion case")
-		fmt.Println(r)
-		fmt.Println(c.Dq)
 		c.Dq.Remove(r)
 		fmt.Println(c.Dq)
 		c.Dq.PushFront(key)
-		//c.dq.PopBack()
 
 	} else if c.Current_size < c.Capacity {
 		fmt.Println("\nPUT")
 		c.Storage[key] = data
 		c.Dq.PushFront(key)
 		c.Current_size += 1
-		////fmt.Println(c.dq)
 	} else if c.Current_size >= c.Capacity {
 		elapsed_key := c.Dq.PopBack()
 		delete(c.Storage, elapsed_key)
