@@ -16,11 +16,12 @@ its a in-house simple Load-Balancer, ReverseProxy and more.
 
 
 
+
 ## How to run
  - git clone repo
  - `go run main.go`
  - hit `localhost:8081` you will see a html page if everything is ok.
- 
+![image](https://ibb.co/QNyMwwK)
 
 ## Configs
  - add configs in `config.json`
@@ -38,4 +39,5 @@ e.g -> `config.json`
 		"http://127.0.0.1:8002"
 	] 
 }
+     
      
